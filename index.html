@@ -1,0 +1,1146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="My Goals">
+<title>My Goals</title>
+<script>
+  // Register service worker for offline use
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      // Inline service worker via blob URL so no separate file is needed
+      const swCode = `
+        const CACHE = 'goals-v1';
+        const FONT_URL = 'https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=DM+Sans:wght@300;400;500&display=swap';
+        self.addEventListener('install', e => {
+          e.waitUntil(
+            caches.open(CACHE).then(cache =>
+              cache.addAll([FONT_URL]).catch(() => {})
+            ).then(() => self.skipWaiting())
+          );
+        });
+        self.addEventListener('activate', e => {
+          e.waitUntil(clients.claim());
+        });
+        self.addEventListener('fetch', e => {
+          e.respondWith(
+            caches.match(e.request).then(cached => {
+              if (cached) return cached;
+              return fetch(e.request).then(response => {
+                if (response && response.status === 200) {
+                  const clone = response.clone();
+                  caches.open(CACHE).then(cache => cache.put(e.request, clone));
+                }
+                return response;
+              }).catch(() => cached);
+            })
+          );
+        });
+      `;
+      const blob = new Blob([swCode], { type: 'application/javascript' });
+      const swUrl = URL.createObjectURL(blob);
+      navigator.serviceWorker.register(swUrl).catch(() => {});
+    });
+  }
+</script>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0f0f0f;
+    --surface: #181818;
+    --surface2: #222222;
+    --border: #2e2e2e;
+    --text: #f0ede8;
+    --text-muted: #7a7670;
+    --text-dim: #4a4845;
+    --accent: #c9a96e;
+    --accent-dim: #2a2218;
+    --danger: #8b3a3a;
+    --green: #4a7c59;
+    --green-bright: #6db88a;
+    --orange-soft: #2a1a0a;
+    --radius: 14px;
+    --radius-sm: 8px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    min-height: 100dvh;
+    max-width: 430px;
+    margin: 0 auto;
+    position: relative;
+    overflow-x: hidden;
+  }
+
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 100;
+    opacity: 0.4;
+  }
+
+  .header {
+    padding: 56px 24px 20px;
+    position: sticky;
+    top: 0;
+    background: var(--bg);
+    z-index: 10;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .header-top {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    margin-bottom: 20px;
+  }
+
+  .app-title {
+    font-family: 'Playfair Display', serif;
+    font-size: 28px;
+    font-weight: 700;
+    letter-spacing: -0.5px;
+  }
+
+  .date-label {
+    font-size: 12px;
+    color: var(--text-muted);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding-bottom: 3px;
+  }
+
+  .tabs {
+    display: flex;
+    gap: 4px;
+    background: var(--surface);
+    border-radius: var(--radius-sm);
+    padding: 3px;
+  }
+
+  .tab {
+    flex: 1;
+    padding: 8px;
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13px;
+    font-weight: 500;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .tab.active {
+    background: var(--surface2);
+    color: var(--text);
+    box-shadow: 0 1px 4px rgba(0,0,0,0.4);
+  }
+
+  .content { padding: 24px 20px 48px; }
+  .page { display: none; }
+  .page.active { display: block; }
+
+  .section-header-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+    margin-top: 28px;
+  }
+  .section-header-row:first-child { margin-top: 0; }
+
+  .section-label {
+    font-size: 10px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--accent);
+    font-weight: 500;
+  }
+
+  .clear-done-btn {
+    background: none;
+    border: none;
+    color: var(--text-dim);
+    font-size: 12px;
+    font-family: 'DM Sans', sans-serif;
+    cursor: pointer;
+    letter-spacing: 0.04em;
+    transition: color 0.2s;
+  }
+  .clear-done-btn:active { color: var(--danger); }
+
+  /* LONG TERM */
+  .long-term-list { display: flex; flex-direction: column; gap: 10px; }
+
+  .long-term-item {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+    position: relative;
+    animation: fadeSlideIn 0.3s ease both;
+  }
+
+  .long-term-item::after {
+    content: '';
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    width: 3px;
+    background: var(--accent);
+    border-radius: 3px 0 0 3px;
+  }
+
+  .goal-photo {
+    width: 100%;
+    height: 130px;
+    object-fit: cover;
+    display: block;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .goal-body {
+    padding: 14px 12px 14px 18px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .long-term-item .goal-text {
+    font-family: 'Playfair Display', serif;
+    font-size: 16px;
+    line-height: 1.5;
+    flex: 1;
+  }
+
+  /* SHORT TERM */
+  .short-term-list { display: flex; flex-direction: column; gap: 8px; }
+
+  .short-term-item {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+    transition: all 0.2s;
+    animation: fadeSlideIn 0.3s ease both;
+  }
+
+  .short-term-item.checked { background: rgba(74,124,89,0.08); border-color: rgba(74,124,89,0.25); }
+
+  .short-term-row {
+    padding: 13px 12px 13px 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    cursor: pointer;
+  }
+
+  .checkbox {
+    width: 22px; height: 22px;
+    border-radius: 50%;
+    border: 2px solid var(--border);
+    flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    transition: all 0.2s;
+  }
+
+  .short-term-item.checked .checkbox { background: var(--green); border-color: var(--green); }
+  .checkbox-check { display: none; color: white; font-size: 12px; }
+  .short-term-item.checked .checkbox-check { display: block; }
+
+  .short-term-item .goal-text { font-size: 15px; line-height: 1.4; flex: 1; transition: all 0.2s; }
+  .short-term-item.checked .goal-text { color: var(--text-muted); text-decoration: line-through; text-decoration-color: var(--text-dim); }
+
+  /* CHECKLIST */
+  .checklist-list { display: flex; flex-direction: column; gap: 8px; }
+
+  .checklist-item {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 13px 12px 13px 16px;
+    display: flex; align-items: center; gap: 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+    animation: fadeSlideIn 0.3s ease both;
+  }
+
+  .checklist-item.checked { opacity: 0.5; }
+  .checklist-item .checkbox { border-radius: 5px; }
+  .checklist-item.checked .checkbox { background: var(--accent); border-color: var(--accent); }
+  .checklist-item .goal-text { font-size: 15px; flex: 1; }
+  .checklist-item.checked .goal-text { text-decoration: line-through; color: var(--text-muted); }
+
+  /* TO-DO LATER */
+  .later-list { display: flex; flex-direction: column; gap: 8px; }
+
+  .later-item {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+    transition: all 0.2s;
+    animation: fadeSlideIn 0.3s ease both;
+  }
+
+  .later-item.checked { opacity: 0.45; }
+
+  .later-row {
+    padding: 13px 12px 13px 16px;
+    display: flex; align-items: flex-start; gap: 12px;
+    cursor: pointer;
+  }
+
+  .later-item .checkbox { border-radius: 5px; margin-top: 2px; }
+  .later-item.checked .checkbox { background: var(--accent); border-color: var(--accent); }
+
+  .later-content { flex: 1; }
+  .later-item .goal-text { font-size: 15px; line-height: 1.4; transition: all 0.2s; }
+  .later-item.checked .goal-text { text-decoration: line-through; color: var(--text-muted); }
+
+  .deadline-tag {
+    display: inline-flex; align-items: center; gap: 4px;
+    margin-top: 5px;
+    font-size: 11px; letter-spacing: 0.04em;
+    padding: 3px 8px;
+    border-radius: 99px;
+    background: var(--orange-soft);
+    color: #d4864a;
+    border: 1px solid rgba(184,106,42,0.25);
+  }
+
+  .deadline-tag.overdue { background: rgba(139,58,58,0.15); color: #c96060; border-color: rgba(139,58,58,0.3); }
+  .deadline-tag.soon { background: rgba(201,169,110,0.1); color: var(--accent); border-color: rgba(201,169,110,0.25); }
+
+  /* PROGRESS */
+  .progress-wrap { margin-bottom: 10px; display: flex; align-items: center; gap: 12px; }
+  .progress-bar { flex: 1; height: 3px; background: var(--surface2); border-radius: 99px; overflow: hidden; }
+  .progress-fill { height: 100%; background: var(--green-bright); border-radius: 99px; transition: width 0.4s cubic-bezier(0.4,0,0.2,1); }
+  .progress-label { font-size: 12px; color: var(--text-muted); white-space: nowrap; }
+
+  /* ICON BTN */
+  .icon-btn {
+    background: none; border: none;
+    color: var(--text-dim); font-size: 18px;
+    cursor: pointer; width: 30px; height: 30px;
+    display: flex; align-items: center; justify-content: center;
+    border-radius: 50%; transition: all 0.2s; flex-shrink: 0;
+  }
+  .icon-btn:active { color: var(--danger); background: rgba(139,58,58,0.15); }
+
+  /* ADD BTN */
+  .add-btn {
+    width: 100%; padding: 13px;
+    background: transparent;
+    border: 1px dashed var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--text-muted);
+    font-family: 'DM Sans', sans-serif; font-size: 14px;
+    cursor: pointer; margin-top: 10px;
+    transition: all 0.2s;
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+  }
+  .add-btn:active { background: var(--surface); color: var(--text); border-color: var(--accent); }
+
+  /* EMPTY */
+  .empty { text-align: center; padding: 28px 16px; color: var(--text-dim); font-size: 14px; line-height: 1.6; }
+  .empty-icon { font-size: 26px; margin-bottom: 8px; }
+
+  /* MODAL */
+  .modal-overlay {
+    display: none; position: fixed; inset: 0;
+    background: rgba(0,0,0,0.75); z-index: 200;
+    align-items: flex-end; backdrop-filter: blur(4px);
+  }
+  .modal-overlay.open { display: flex; }
+
+  .modal {
+    background: var(--surface);
+    border-radius: 20px 20px 0 0;
+    padding: 28px 24px 48px;
+    width: 100%;
+    border-top: 1px solid var(--border);
+    animation: slideUp 0.3s cubic-bezier(0.32, 0.72, 0, 1);
+  }
+
+  .modal-title { font-family: 'Playfair Display', serif; font-size: 20px; margin-bottom: 16px; }
+
+  .modal-input {
+    width: 100%; background: var(--surface2);
+    border: 1px solid var(--border); border-radius: var(--radius-sm);
+    padding: 14px 16px; color: var(--text);
+    font-family: 'DM Sans', sans-serif; font-size: 16px;
+    outline: none; resize: none; min-height: 76px; transition: border-color 0.2s;
+  }
+  .modal-input:focus { border-color: var(--accent); }
+
+  .modal-date-row { display: none; align-items: center; gap: 10px; margin-top: 12px; }
+  .modal-date-row.visible { display: flex; }
+  .modal-date-label { font-size: 13px; color: var(--text-muted); white-space: nowrap; }
+
+  .modal-date-input {
+    flex: 1; background: var(--surface2);
+    border: 1px solid var(--border); border-radius: var(--radius-sm);
+    padding: 10px 14px; color: var(--text);
+    font-family: 'DM Sans', sans-serif; font-size: 15px;
+    outline: none; transition: border-color 0.2s; color-scheme: dark;
+  }
+  .modal-date-input:focus { border-color: var(--accent); }
+
+  .modal-photo-row { display: none; margin-top: 12px; }
+  .modal-photo-row.visible { display: block; }
+
+  .photo-pick-btn {
+    width: 100%; padding: 11px;
+    background: var(--surface2);
+    border: 1px dashed var(--border); border-radius: var(--radius-sm);
+    color: var(--text-muted);
+    font-family: 'DM Sans', sans-serif; font-size: 14px;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    transition: all 0.2s;
+  }
+  .photo-pick-btn:active { border-color: var(--accent); color: var(--text); }
+
+  .photo-preview-wrap { position: relative; margin-top: 10px; display: none; }
+  .photo-preview-wrap.has-photo { display: block; }
+
+  .photo-preview {
+    width: 100%; height: 120px; object-fit: cover;
+    border-radius: var(--radius-sm); border: 1px solid var(--border); display: block;
+  }
+
+  .photo-remove {
+    position: absolute; top: 6px; right: 6px;
+    background: rgba(0,0,0,0.7); border: none; color: white;
+    width: 24px; height: 24px; border-radius: 50%;
+    font-size: 14px; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+  }
+
+  .modal-actions { display: flex; gap: 10px; margin-top: 16px; }
+
+  .btn-cancel {
+    flex: 1; padding: 14px;
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: var(--radius-sm); color: var(--text-muted);
+    font-family: 'DM Sans', sans-serif; font-size: 15px; cursor: pointer;
+  }
+
+  .btn-save {
+    flex: 2; padding: 14px;
+    background: var(--accent); border: none;
+    border-radius: var(--radius-sm); color: #1a1200;
+    font-family: 'DM Sans', sans-serif; font-size: 15px; font-weight: 600;
+    cursor: pointer; transition: opacity 0.2s;
+  }
+  .btn-save:active { opacity: 0.8; }
+
+  /* FOCUS BTN */
+  .focus-btn-wrap {
+    padding: 32px 0 48px;
+  }
+
+  .focus-btn {
+    width: 100%; padding: 18px;
+    background: linear-gradient(135deg, #c9a96e, #a07840);
+    border: none; border-radius: var(--radius);
+    color: #1a1200;
+    font-family: 'DM Sans', sans-serif; font-size: 16px; font-weight: 600;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center; gap: 10px;
+    box-shadow: 0 4px 24px rgba(201,169,110,0.25);
+    transition: all 0.2s;
+  }
+  .focus-btn:active { transform: scale(0.98); }
+
+  /* HEADER PHOTO BANNER */
+  .header-banner-wrap {
+    position: relative;
+    display: none;
+    margin: 0 -20px;
+  }
+  .header-banner-wrap.has-banner { display: block; }
+
+  .header-banner {
+    width: 100%;
+    height: 180px;
+    object-fit: cover;
+    display: block;
+  }
+
+  .banner-remove {
+    position: absolute; top: 10px; right: 10px;
+    background: rgba(0,0,0,0.6); border: none; color: white;
+    width: 28px; height: 28px; border-radius: 50%;
+    font-size: 16px; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    backdrop-filter: blur(4px);
+  }
+
+  /* PLUS BUTTON in header */
+  .header-plus-btn {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+    width: 32px; height: 32px;
+    border-radius: 50%;
+    font-size: 20px; line-height: 1;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: all 0.2s;
+    flex-shrink: 0;
+    padding-bottom: 1px;
+  }
+  .header-plus-btn:active { color: var(--accent); border-color: var(--accent); background: var(--accent-dim); }
+
+  /* EDIT / REORDER */
+  .edit-btn {
+    background: none; border: none;
+    color: var(--text-dim);
+    font-size: 12px;
+    font-family: 'DM Sans', sans-serif;
+    cursor: pointer;
+    letter-spacing: 0.04em;
+    transition: color 0.2s;
+    padding: 4px 8px;
+    margin-right: -8px;
+  }
+  .edit-btn.active { color: var(--accent); }
+  .edit-btn:active { color: var(--accent); }
+
+  .reorder-controls {
+    display: none;
+    flex-direction: column;
+    gap: 2px;
+    margin-right: 4px;
+    flex-shrink: 0;
+  }
+  .editing .reorder-controls { display: flex; }
+
+  .reorder-btn {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+    width: 28px; height: 22px;
+    border-radius: 4px;
+    font-size: 11px; line-height: 1;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: all 0.15s;
+    padding: 0;
+  }
+  .reorder-btn:active { background: var(--accent-dim); color: var(--accent); border-color: var(--accent); }
+  .reorder-btn:disabled { opacity: 0.3; cursor: default; }
+
+  /* Hide delete and disable click/check when editing */
+  .editing .icon-btn.delete-btn-x { display: none; }
+  .editing.short-term-item .short-term-row,
+  .editing.checklist-item,
+  .editing.later-item .later-row { cursor: default; pointer-events: auto; }
+
+  /* Visual pulse to show edit mode is on */
+  .editing {
+    box-shadow: 0 0 0 1px rgba(201,169,110,0.3);
+  }
+
+  /* BUCKET LIST accent overrides */
+  .bucket-accent { color: #7eb8d4; }
+  .bucket-section-label { color: #7eb8d4 !important; }
+  .bucket-add-btn {
+    border-color: rgba(126,184,212,0.35) !important;
+    color: #7eb8d4 !important;
+  }
+  .bucket-add-btn:active { background: rgba(126,184,212,0.08) !important; border-color: #7eb8d4 !important; color: #b8dcea !important; }
+  .bucket-item {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 13px 12px 13px 16px;
+    display: flex; align-items: center; gap: 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+    animation: fadeSlideIn 0.3s ease both;
+  }
+  .bucket-item.checked { opacity: 0.5; }
+  .bucket-item .checkbox { border-radius: 50%; border-color: rgba(126,184,212,0.4); }
+  .bucket-item.checked .checkbox { background: #7eb8d4; border-color: #7eb8d4; }
+  .bucket-item .goal-text { font-size: 15px; flex: 1; }
+  .bucket-item.checked .goal-text { text-decoration: line-through; color: var(--text-muted); }
+  .bucket-item.editing { box-shadow: 0 0 0 1px rgba(126,184,212,0.3); }
+  .bucket-progress-fill { background: #7eb8d4 !important; }
+  .bucket-edit-btn.active { color: #7eb8d4 !important; }
+  .clear-done-btn.bucket-clear:active { color: #7eb8d4; }
+
+  /* BACKUP MODAL */
+  .backup-overlay {
+    display: none; position: fixed; inset: 0;
+    background: rgba(0,0,0,0.8); z-index: 200;
+    align-items: flex-end; backdrop-filter: blur(4px);
+  }
+  .backup-overlay.open { display: flex; }
+  .backup-modal {
+    background: var(--surface); border-radius: 20px 20px 0 0;
+    padding: 28px 24px 48px; width: 100%;
+    border-top: 1px solid var(--border);
+    animation: slideUp 0.3s cubic-bezier(0.32,0.72,0,1);
+  }
+  .backup-title { font-family: 'Playfair Display', serif; font-size: 20px; margin-bottom: 6px; }
+  .backup-sub { font-size: 13px; color: var(--text-muted); margin-bottom: 20px; line-height: 1.5; }
+  .backup-row { display: flex; flex-direction: column; gap: 10px; }
+  .backup-action-btn {
+    width: 100%; padding: 15px 18px;
+    border-radius: var(--radius-sm); border: none;
+    font-family: 'DM Sans', sans-serif; font-size: 15px; font-weight: 500;
+    cursor: pointer; display: flex; align-items: center; gap: 12px;
+    transition: opacity 0.2s;
+  }
+  .backup-action-btn:active { opacity: 0.75; }
+  .backup-btn-export { background: var(--accent); color: #1a1200; }
+  .backup-btn-import { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
+  .backup-btn-close  { background: transparent; color: var(--text-muted); border: 1px solid var(--border); justify-content: center; margin-top: 4px; }
+  .backup-icon { font-size: 18px; }
+  .backup-text { display: flex; flex-direction: column; text-align: left; }
+  .backup-text span { font-size: 12px; color: var(--text-muted); font-weight: 400; margin-top: 1px; }
+  .backup-btn-export .backup-text span { color: rgba(26,18,0,0.6); }
+
+  @keyframes fadeSlideIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+  @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+</style>
+</head>
+<body>
+
+<input type="file" id="photoInput" accept="image/*" style="position:absolute;left:-9999px;opacity:0;pointer-events:none;width:1px;height:1px">
+<input type="file" id="bannerInput" accept="image/*" style="position:absolute;left:-9999px;opacity:0;pointer-events:none;width:1px;height:1px">
+
+<div class="header">
+  <div class="header-top">
+    <div class="app-title">My Goals</div>
+    <div style="display:flex;align-items:center;gap:10px">
+      <div class="date-label" id="dateLabel"></div>
+      <button class="header-plus-btn" onclick="openBackup()" title="Backup & restore" style="font-size:15px">⬆︎</button>
+      <button class="header-plus-btn" onclick="openKeep()" title="Open Google Keep" style="font-size:15px;background:#2a2a1a;border-color:#4a4a1a;color:#f5c518">📝</button>
+      <button class="header-plus-btn" onclick="triggerBannerPick()" title="Add photo">+</button>
+    </div>
+  </div>
+  <div class="tabs">
+    <button class="tab active" onclick="switchTab('goals')">My Goals</button>
+    <button class="tab" onclick="switchTab('checklist')">Checklist</button>
+    <button class="tab" onclick="switchTab('bucket')">Bucket List</button>
+  </div>
+</div>
+
+<!-- BANNER PHOTO (below header, above content) -->
+<div class="header-banner-wrap" id="headerBannerWrap">
+  <img class="header-banner" id="headerBanner" src="" alt="">
+  <button class="banner-remove" onclick="removeBanner()">×</button>
+</div>
+
+<div class="content">
+
+  <!-- GOALS PAGE -->
+  <div class="page active" id="page-goals">
+    <div class="section-header-row" style="margin-top:0">
+      <div class="section-label">Long-term goals</div>
+      <button class="edit-btn" id="editBtn-longterm" onclick="toggleEdit('longterm')">Edit</button>
+    </div>
+    <div class="long-term-list" id="longTermList"></div>
+    <button class="add-btn" onclick="openModal('longterm')">＋ Add long-term goal</button>
+
+    <div class="section-header-row">
+      <div class="section-label">Short-term goals</div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <button class="clear-done-btn" onclick="clearChecked('shortterm')">Clear done</button>
+        <button class="edit-btn" id="editBtn-shortterm" onclick="toggleEdit('shortterm')">Edit</button>
+      </div>
+    </div>
+    <div id="shortTermProgress" class="progress-wrap" style="display:none">
+      <div class="progress-bar"><div class="progress-fill" id="shortTermFill"></div></div>
+      <div class="progress-label" id="shortTermLabel"></div>
+    </div>
+    <div class="short-term-list" id="shortTermList"></div>
+    <button class="add-btn" onclick="openModal('shortterm')">＋ Add short-term goal</button>
+
+    <!-- Focus button inline at very bottom -->
+    <div class="focus-btn-wrap">
+      <button class="focus-btn" onclick="releaseFocus()">
+        <span>✦</span> Goals reviewed — open my phone
+      </button>
+    </div>
+  </div>
+
+  <!-- CHECKLIST PAGE -->
+  <div class="page" id="page-checklist">
+    <div class="section-header-row" style="margin-top:0">
+      <div class="section-label">To-do</div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <button class="clear-done-btn" onclick="clearChecked('checklist')">Clear done</button>
+        <button class="edit-btn" id="editBtn-checklist" onclick="toggleEdit('checklist')">Edit</button>
+      </div>
+    </div>
+    <div id="checklistProgress" class="progress-wrap" style="display:none">
+      <div class="progress-bar"><div class="progress-fill" id="checklistFill"></div></div>
+      <div class="progress-label" id="checklistLabel"></div>
+    </div>
+    <div class="checklist-list" id="checklistList"></div>
+    <button class="add-btn" onclick="openModal('checklist')">＋ Add task</button>
+
+    <div class="section-header-row">
+      <div class="section-label">To-do later</div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <button class="clear-done-btn" onclick="clearChecked('later')">Clear done</button>
+        <button class="edit-btn" id="editBtn-later" onclick="toggleEdit('later')">Edit</button>
+      </div>
+    </div>
+    <div id="laterProgress" class="progress-wrap" style="display:none">
+      <div class="progress-bar"><div class="progress-fill" id="laterFill"></div></div>
+      <div class="progress-label" id="laterLabel"></div>
+    </div>
+    <div class="later-list" id="laterList"></div>
+    <button class="add-btn" onclick="openModal('later')">＋ Add later task</button>
+  </div>
+
+  <!-- BUCKET LIST PAGE -->
+  <div class="page" id="page-bucket">
+    <div class="section-header-row" style="margin-top:0">
+      <div class="section-label bucket-section-label">Bucket list</div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <button class="clear-done-btn bucket-clear" onclick="clearChecked('bucket')">Clear done</button>
+        <button class="edit-btn bucket-edit-btn" id="editBtn-bucket" onclick="toggleEdit('bucket')">Edit</button>
+      </div>
+    </div>
+    <div id="bucketProgress" class="progress-wrap" style="display:none">
+      <div class="progress-bar"><div class="progress-fill bucket-progress-fill" id="bucketFill"></div></div>
+      <div class="progress-label" id="bucketLabel"></div>
+    </div>
+    <div class="bucket-list" id="bucketList"></div>
+    <button class="add-btn bucket-add-btn" onclick="openModal('bucket')">＋ Add bucket list item</button>
+  </div>
+
+</div>
+
+<input type="file" id="importInput" accept=".json" style="position:absolute;left:-9999px;opacity:0;pointer-events:none;width:1px;height:1px">
+
+<!-- BACKUP MODAL -->
+<div class="backup-overlay" id="backupOverlay" onclick="handleBackupOverlayClick(event)">
+  <div class="backup-modal">
+    <div class="backup-title">Backup & Restore</div>
+    <div class="backup-sub">Export saves all your goals and tasks as a file you can keep forever. Import restores from a previous export.</div>
+    <div class="backup-row">
+      <button class="backup-action-btn backup-btn-export" onclick="exportData()">
+        <span class="backup-icon">📤</span>
+        <div class="backup-text">Export backup<span>Downloads a .json file to your device</span></div>
+      </button>
+      <button class="backup-action-btn backup-btn-import" onclick="document.getElementById('importInput').click()">
+        <span class="backup-icon">📥</span>
+        <div class="backup-text">Import backup<span>Restore from a .json file — replaces current data</span></div>
+      </button>
+      <button class="backup-action-btn backup-btn-close" onclick="closeBackup()">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL -->
+<div class="modal-overlay" id="modalOverlay" onclick="handleOverlayClick(event)">
+  <div class="modal">
+    <div class="modal-title" id="modalTitle"></div>
+    <textarea class="modal-input" id="modalInput" rows="3"></textarea>
+
+    <div class="modal-date-row" id="modalDateRow">
+      <div class="modal-date-label">Due by</div>
+      <input type="date" class="modal-date-input" id="modalDateInput">
+    </div>
+
+    <div class="modal-photo-row" id="modalPhotoRow">
+      <button class="photo-pick-btn" onclick="triggerPhotoPick()">🖼 Add photo from camera roll</button>
+      <div class="photo-preview-wrap" id="photoPreviewWrap">
+        <img class="photo-preview" id="photoPreview" src="" alt="">
+        <button class="photo-remove" onclick="removePhoto()">×</button>
+      </div>
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeModal()">Cancel</button>
+      <button class="btn-save" onclick="saveItem()">Save</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  let currentModal = null;
+  let pendingPhotoData = null;
+
+  const defaultData = { longterm: [], shortterm: [], checklist: [], later: [], bucket: [] };
+
+  function loadData() {
+    try { return { ...defaultData, ...JSON.parse(localStorage.getItem('goalsData')) }; }
+    catch { return { ...defaultData }; }
+  }
+
+  function saveData(d) { localStorage.setItem('goalsData', JSON.stringify(d)); }
+
+  function updateDate() {
+    document.getElementById('dateLabel').textContent =
+      new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+  }
+
+  function switchTab(tab) {
+    document.querySelectorAll('.tab').forEach((t, i) => {
+      t.classList.toggle('active',
+        (i===0 && tab==='goals') || (i===1 && tab==='checklist') || (i===2 && tab==='bucket'));
+    });
+    document.getElementById('page-goals').classList.toggle('active', tab==='goals');
+    document.getElementById('page-checklist').classList.toggle('active', tab==='checklist');
+    document.getElementById('page-bucket').classList.toggle('active', tab==='bucket');
+  }
+
+  // Banner photo
+  function triggerBannerPick() { document.getElementById('bannerInput').click(); }
+
+  document.getElementById('bannerInput').addEventListener('change', function(e) {
+    const file = e.target.files[0]; if (!file) return;
+    const reader = new FileReader();
+    reader.onload = ev => {
+      const data = ev.target.result;
+      localStorage.setItem('bannerPhoto', data);
+      renderBanner(data);
+    };
+    reader.readAsDataURL(file);
+    this.value = '';
+  });
+
+  function renderBanner(data) {
+    const wrap = document.getElementById('headerBannerWrap');
+    const img = document.getElementById('headerBanner');
+    if (data) { img.src = data; wrap.classList.add('has-banner'); }
+    else { img.src = ''; wrap.classList.remove('has-banner'); }
+  }
+
+  function removeBanner() {
+    localStorage.removeItem('bannerPhoto');
+    renderBanner(null);
+  }
+
+  // ── Edit mode state ────────────────────────────────────────────────────
+  const editModes = { longterm: false, shortterm: false, checklist: false, later: false, bucket: false };
+
+  function toggleEdit(type) {
+    editModes[type] = !editModes[type];
+    const btn = document.getElementById('editBtn-' + type);
+    if (btn) {
+      btn.textContent = editModes[type] ? 'Done' : 'Edit';
+      btn.classList.toggle('active', editModes[type]);
+    }
+    render();
+  }
+
+  function moveItem(type, index, direction) {
+    const d = loadData();
+    const arr = d[type];
+    const newIndex = index + direction;
+    if (newIndex < 0 || newIndex >= arr.length) return;
+    // Swap
+    [arr[index], arr[newIndex]] = [arr[newIndex], arr[index]];
+    saveData(d);
+    render();
+  }
+
+  function render() {
+    const d = loadData();
+    renderLongTerm(d.longterm);
+    renderShortTerm(d.shortterm);
+    renderChecklist(d.checklist);
+    renderLater(d.later);
+    renderBucket(d.bucket);
+  }
+
+  function renderLongTerm(items) {
+    const el = document.getElementById('longTermList');
+    if (!items.length) { el.innerHTML = '<div class="empty"><div class="empty-icon">🌄</div>Your big-picture goals will appear here.</div>'; return; }
+    const isEditing = editModes.longterm;
+    el.innerHTML = items.map((item, i) => `
+      <div class="long-term-item ${isEditing?'editing':''}">
+        ${item.photo ? `<img class="goal-photo" src="${item.photo}" alt="">` : ''}
+        <div class="goal-body">
+          <div class="reorder-controls">
+            <button class="reorder-btn" onclick="moveItem('longterm',${i},-1)" ${i===0?'disabled':''}>▲</button>
+            <button class="reorder-btn" onclick="moveItem('longterm',${i},1)" ${i===items.length-1?'disabled':''}>▼</button>
+          </div>
+          <div class="goal-text">${escHtml(item.text)}</div>
+          <button class="icon-btn delete-btn-x" onclick="deleteItem('longterm',${i})">×</button>
+        </div>
+      </div>`).join('');
+  }
+
+  function renderShortTerm(items) {
+    const el = document.getElementById('shortTermList');
+    const pw = document.getElementById('shortTermProgress');
+    if (!items.length) { el.innerHTML = '<div class="empty"><div class="empty-icon">🎯</div>Add goals to work on this week.</div>'; pw.style.display='none'; return; }
+    const done = items.filter(i=>i.checked).length;
+    pw.style.display = 'flex';
+    document.getElementById('shortTermFill').style.width = Math.round(done/items.length*100)+'%';
+    document.getElementById('shortTermLabel').textContent = `${done}/${items.length}`;
+    const isEditing = editModes.shortterm;
+    el.innerHTML = items.map((item, i) => `
+      <div class="short-term-item ${item.checked?'checked':''} ${isEditing?'editing':''}">
+        ${item.photo ? `<img class="goal-photo" src="${item.photo}" alt="">` : ''}
+        <div class="short-term-row" ${isEditing?'':`onclick="toggleItem('shortterm',${i})"`}>
+          <div class="reorder-controls">
+            <button class="reorder-btn" onclick="event.stopPropagation();moveItem('shortterm',${i},-1)" ${i===0?'disabled':''}>▲</button>
+            <button class="reorder-btn" onclick="event.stopPropagation();moveItem('shortterm',${i},1)" ${i===items.length-1?'disabled':''}>▼</button>
+          </div>
+          <div class="checkbox"><span class="checkbox-check">✓</span></div>
+          <div class="goal-text">${escHtml(item.text)}</div>
+          <button class="icon-btn delete-btn-x" onclick="event.stopPropagation();deleteItem('shortterm',${i})">×</button>
+        </div>
+      </div>`).join('');
+  }
+
+  function renderChecklist(items) {
+    const el = document.getElementById('checklistList');
+    const pw = document.getElementById('checklistProgress');
+    if (!items.length) { el.innerHTML = '<div class="empty"><div class="empty-icon">📋</div>Add tasks to get done today.</div>'; pw.style.display='none'; return; }
+    const done = items.filter(i=>i.checked).length;
+    pw.style.display = 'flex';
+    document.getElementById('checklistFill').style.width = Math.round(done/items.length*100)+'%';
+    document.getElementById('checklistLabel').textContent = `${done}/${items.length}`;
+    const isEditing = editModes.checklist;
+    el.innerHTML = items.map((item,i) => `
+      <div class="checklist-item ${item.checked?'checked':''} ${isEditing?'editing':''}" ${isEditing?'':`onclick="toggleItem('checklist',${i})"`}>
+        <div class="reorder-controls">
+          <button class="reorder-btn" onclick="event.stopPropagation();moveItem('checklist',${i},-1)" ${i===0?'disabled':''}>▲</button>
+          <button class="reorder-btn" onclick="event.stopPropagation();moveItem('checklist',${i},1)" ${i===items.length-1?'disabled':''}>▼</button>
+        </div>
+        <div class="checkbox"><span class="checkbox-check">✓</span></div>
+        <div class="goal-text">${escHtml(item.text)}</div>
+        <button class="icon-btn delete-btn-x" onclick="event.stopPropagation();deleteItem('checklist',${i})">×</button>
+      </div>`).join('');
+  }
+
+  function renderLater(items) {
+    const el = document.getElementById('laterList');
+    const pw = document.getElementById('laterProgress');
+    if (!items.length) { el.innerHTML = '<div class="empty"><div class="empty-icon">🗓</div>Add tasks with a deadline for later.</div>'; pw.style.display='none'; return; }
+    const done = items.filter(i=>i.checked).length;
+    pw.style.display = 'flex';
+    document.getElementById('laterFill').style.width = Math.round(done/items.length*100)+'%';
+    document.getElementById('laterLabel').textContent = `${done}/${items.length}`;
+    const today = new Date(); today.setHours(0,0,0,0);
+    const isEditing = editModes.later;
+    el.innerHTML = items.map((item,i) => {
+      let tag = '';
+      if (item.deadline) {
+        const due = new Date(item.deadline+'T00:00:00');
+        const diff = Math.round((due-today)/86400000);
+        let cls='', txt='';
+        if (diff<0) { cls='overdue'; txt=`Overdue by ${Math.abs(diff)}d`; }
+        else if (diff===0) { cls='soon'; txt='Due today'; }
+        else if (diff<=3) { cls='soon'; txt=`Due in ${diff}d`; }
+        else { txt=`Due ${due.toLocaleDateString('en-US',{month:'short',day:'numeric'})}`; }
+        tag = `<div class="deadline-tag ${cls}">⏱ ${txt}</div>`;
+      }
+      return `
+        <div class="later-item ${item.checked?'checked':''} ${isEditing?'editing':''}">
+          <div class="later-row" ${isEditing?'':`onclick="toggleItem('later',${i})"`}>
+            <div class="reorder-controls">
+              <button class="reorder-btn" onclick="event.stopPropagation();moveItem('later',${i},-1)" ${i===0?'disabled':''}>▲</button>
+              <button class="reorder-btn" onclick="event.stopPropagation();moveItem('later',${i},1)" ${i===items.length-1?'disabled':''}>▼</button>
+            </div>
+            <div class="checkbox"><span class="checkbox-check">✓</span></div>
+            <div class="later-content">
+              <div class="goal-text">${escHtml(item.text)}</div>
+              ${tag}
+            </div>
+            <button class="icon-btn delete-btn-x" onclick="event.stopPropagation();deleteItem('later',${i})">×</button>
+          </div>
+        </div>`;
+    }).join('');
+  }
+
+  function renderBucket(items) {
+    const el = document.getElementById('bucketList');
+    const pw = document.getElementById('bucketProgress');
+    if (!items.length) { el.innerHTML = '<div class="empty"><div class="empty-icon">🌟</div>Add things you want to do before you die.</div>'; pw.style.display='none'; return; }
+    const done = items.filter(i=>i.checked).length;
+    pw.style.display = 'flex';
+    document.getElementById('bucketFill').style.width = Math.round(done/items.length*100)+'%';
+    document.getElementById('bucketLabel').textContent = `${done}/${items.length}`;
+    const isEditing = editModes.bucket;
+    el.innerHTML = items.map((item,i) => `
+      <div class="bucket-item ${item.checked?'checked':''} ${isEditing?'editing':''}" ${isEditing?'':`onclick="toggleItem('bucket',${i})"`}>
+        <div class="reorder-controls">
+          <button class="reorder-btn" onclick="event.stopPropagation();moveItem('bucket',${i},-1)" ${i===0?'disabled':''}>▲</button>
+          <button class="reorder-btn" onclick="event.stopPropagation();moveItem('bucket',${i},1)" ${i===items.length-1?'disabled':''}>▼</button>
+        </div>
+        <div class="checkbox"><span class="checkbox-check">✓</span></div>
+        <div class="goal-text">${escHtml(item.text)}</div>
+        <button class="icon-btn delete-btn-x" onclick="event.stopPropagation();deleteItem('bucket',${i})">×</button>
+      </div>`).join('');
+  }
+
+  function toggleItem(type, i) {
+    const d = loadData(); d[type][i].checked = !d[type][i].checked; saveData(d); render();
+  }
+
+  function deleteItem(type, i) {
+    const d = loadData(); d[type].splice(i,1); saveData(d); render();
+  }
+
+  function clearChecked(type) {
+    const d = loadData(); d[type] = d[type].filter(i=>!i.checked); saveData(d); render();
+  }
+
+  // Photo
+  function triggerPhotoPick() { document.getElementById('photoInput').click(); }
+
+  document.getElementById('photoInput').addEventListener('change', function(e) {
+    const file = e.target.files[0]; if (!file) return;
+    const reader = new FileReader();
+    reader.onload = ev => {
+      pendingPhotoData = ev.target.result;
+      document.getElementById('photoPreview').src = pendingPhotoData;
+      document.getElementById('photoPreviewWrap').classList.add('has-photo');
+    };
+    reader.readAsDataURL(file);
+    this.value = '';
+  });
+
+  function removePhoto() {
+    pendingPhotoData = null;
+    document.getElementById('photoPreview').src = '';
+    document.getElementById('photoPreviewWrap').classList.remove('has-photo');
+  }
+
+  // Modal
+  const cfg = {
+    longterm:  { title:'Add long-term goal',      ph:'e.g. Run a marathon by next year…', date:false, photo:true  },
+    shortterm: { title:'Add short-term goal',     ph:'e.g. Exercise 4 times this week…',  date:false, photo:true  },
+    checklist: { title:'Add task',                ph:'e.g. Reply to emails…',              date:false, photo:false },
+    later:     { title:'Add later task',          ph:'e.g. Book dentist appointment…',     date:true,  photo:false },
+    bucket:    { title:'Add bucket list item',    ph:'e.g. See the Northern Lights…',      date:false, photo:false },
+  };
+
+  function openModal(type) {
+    currentModal = type; pendingPhotoData = null;
+    const c = cfg[type];
+    document.getElementById('modalTitle').textContent = c.title;
+    document.getElementById('modalInput').placeholder = c.ph;
+    document.getElementById('modalInput').value = '';
+    document.getElementById('modalDateRow').classList.toggle('visible', c.date);
+    document.getElementById('modalDateInput').value = '';
+    document.getElementById('modalPhotoRow').classList.toggle('visible', c.photo);
+    document.getElementById('photoPreviewWrap').classList.remove('has-photo');
+    document.getElementById('photoPreview').src = '';
+    document.getElementById('modalOverlay').classList.add('open');
+    setTimeout(() => document.getElementById('modalInput').focus(), 350);
+  }
+
+  function closeModal() {
+    document.getElementById('modalOverlay').classList.remove('open');
+    currentModal = null; pendingPhotoData = null;
+  }
+
+  function handleOverlayClick(e) { if (e.target===document.getElementById('modalOverlay')) closeModal(); }
+
+  function saveItem() {
+    const text = document.getElementById('modalInput').value.trim(); if (!text) return;
+    const d = loadData();
+    const item = { text, checked: false };
+    if (pendingPhotoData) item.photo = pendingPhotoData;
+    if (currentModal==='later') {
+      const dt = document.getElementById('modalDateInput').value;
+      if (dt) item.deadline = dt;
+    }
+    d[currentModal].push(item);
+    saveData(d); closeModal(); render();
+  }
+
+  document.getElementById('modalInput').addEventListener('keydown', e => {
+    if (e.key==='Enter' && !e.shiftKey) { e.preventDefault(); saveItem(); }
+  });
+
+  function releaseFocus() {
+    window.location.href = 'shortcuts://run-shortcut?name=End%20Focus%20Mode';
+    const btn = document.querySelector('.focus-btn');
+    btn.innerHTML = '<span>✓</span> Focus mode released';
+    btn.style.background = 'linear-gradient(135deg,#4a7c59,#2d5c3a)';
+    btn.style.color = '#e0f0e8';
+    setTimeout(() => {
+      btn.innerHTML = '<span>✦</span> Goals reviewed — open my phone';
+      btn.style.background = ''; btn.style.color = '';
+    }, 2500);
+  }
+
+  document.addEventListener('keydown', e => { if (e.key==='Escape') closeModal(); });
+
+  function escHtml(s) {
+    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  // ── Google Keep ───────────────────────────────────────────────────────
+  function openKeep() {
+    // Try the native app first, fall back to web if not installed
+    window.location.href = 'com.google.keep://';
+    setTimeout(() => {
+      window.open('https://keep.google.com', '_blank');
+    }, 800);
+  }
+
+  // ── Backup & Restore ──────────────────────────────────────────────────
+  function openBackup() { document.getElementById('backupOverlay').classList.add('open'); }
+  function closeBackup() { document.getElementById('backupOverlay').classList.remove('open'); }
+  function handleBackupOverlayClick(e) { if (e.target === document.getElementById('backupOverlay')) closeBackup(); }
+
+  function exportData() {
+    const data = loadData();
+    const json = JSON.stringify({ version: 1, exported: new Date().toISOString(), data }, null, 2);
+    const blob = new Blob([json], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const date = new Date().toISOString().slice(0,10);
+    a.href = url; a.download = `goals-backup-${date}.json`;
+    a.click(); URL.revokeObjectURL(url);
+    closeBackup();
+  }
+
+  document.getElementById('importInput').addEventListener('change', function(e) {
+    const file = e.target.files[0]; if (!file) return;
+    const reader = new FileReader();
+    reader.onload = ev => {
+      try {
+        const parsed = JSON.parse(ev.target.result);
+        const incoming = parsed.data || parsed; // support both formats
+        // Validate it has at least one expected key
+        if (!incoming.longterm && !incoming.checklist && !incoming.bucket) {
+          alert('This file doesn\'t look like a valid Goals backup.'); return;
+        }
+        const confirmed = confirm('This will replace all your current data with the backup. Continue?');
+        if (!confirmed) return;
+        saveData({ ...defaultData, ...incoming });
+        render();
+        closeBackup();
+        alert('Restored successfully!');
+      } catch {
+        alert('Could not read that file. Make sure it\'s a Goals backup .json file.');
+      }
+    };
+    reader.readAsText(file);
+    this.value = '';
+  });
+
+  updateDate(); render();
+  renderBanner(localStorage.getItem('bannerPhoto'));
+</script>
+</body>
+</html>
