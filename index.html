@@ -1096,11 +1096,7 @@
 
   // ── Google Keep ───────────────────────────────────────────────────────
   function openKeep() {
-    // Try the native app first, fall back to web if not installed
-    window.location.href = 'com.google.keep://';
-    setTimeout(() => {
-      window.open('https://keep.google.com', '_blank');
-    }, 800);
+    window.location.href = 'shortcuts://run-shortcut?name=Open%20Keep';
   }
 
   // ── Backup & Restore ──────────────────────────────────────────────────
